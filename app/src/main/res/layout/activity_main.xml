@@ -13,6 +13,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:text="@string/location"
+        android:textAllCaps="false"
         android:textSize="24sp" />
 
     <TextView
