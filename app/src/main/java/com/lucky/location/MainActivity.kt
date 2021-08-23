@@ -5,7 +5,7 @@ import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Bundle
-import android.widget.Toast
+import android.os.Looper
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import com.google.android.gms.common.api.ResolvableApiException
@@ -17,15 +17,31 @@ import com.lucky.location.databinding.ActivityMainBinding
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private lateinit var locationRequest: LocationRequest
+    private var requestingLocationUpdates: Boolean = false
+    private lateinit var location: Location
+    /*We will use the above boolean flag to track whether the user has turned location updates on or off*/
 
     companion object {
         const val REQUEST_LOCATION = 100
         const val REQUEST_CHECK_SETTINGS = 101
+        const val REQUESTING_LOCATION_UPDATES_KEY = "location_updates_key"
+    }
+
+    private val locationCallback = object : LocationCallback() {
+        override fun onLocationResult(locationResult: LocationResult?) {
+            locationResult ?: return
+            for (location in locationResult.locations) {
+                "Latitude: ${location.latitude}\nLongitude: ${location.longitude}"
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+//        updateValuesFromBundle(savedInstanceState)
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         val view = binding.root
@@ -34,7 +50,7 @@ class MainActivity : AppCompatActivity() {
         /*SETTING UP A LOCATION REQUEST
     LocationRequest object defines settings to enable certain services on the device such as GPS or WIFI scanning. Does this indirectly by specifying the desired
     * level of accuracy/power consumption and desired update interval for the application*/
-        val locationRequest = LocationRequest.create().apply {
+        locationRequest = LocationRequest.create().apply {
             interval = 10000 //update interval
             fastestInterval =
                 5000 //fastest rate in milliseconds by which the app can handle location updates
@@ -81,25 +97,27 @@ class MainActivity : AppCompatActivity() {
                                 binding.txtLocation.text =
                                     "Latitude: ${location.latitude}\nLongitude: ${location.longitude}"
                             } else {
-                                Toast.makeText(
-                                    applicationContext,
-                                    "Cannot trace location, still in production mode",
-                                    Toast.LENGTH_LONG
-                                ).show()
+                                fusedLocationClient.requestLocationUpdates(
+                                    locationRequest,
+                                    locationCallback,
+                                    Looper.getMainLooper()
+                                )
                             }
                         }
                 }
             }
 
             task.addOnFailureListener { exception ->
-                if (exception is ResolvableApiException){
+                if (exception is ResolvableApiException) {
                     // Location settings are not satisfied, but this can be fixed
                     // by showing the user a dialog.
                     try {
                         // Show the dialog by calling startResolutionForResult(),
                         // and check the result in onActivityResult().
-                        exception.startResolutionForResult(this,
-                            REQUEST_CHECK_SETTINGS)
+                        exception.startResolutionForResult(
+                            this,
+                            REQUEST_CHECK_SETTINGS
+                        )
                     } catch (sendEx: IntentSender.SendIntentException) {
                         // Ignore the error.
                     }
@@ -110,4 +128,58 @@ class MainActivity : AppCompatActivity() {
 
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (requestingLocationUpdates) startLocationUpdates()
+    }
+
+    private fun startLocationUpdates() {
+        if (ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                REQUEST_LOCATION
+            )
+        }
+        requestingLocationUpdates = true
+        fusedLocationClient.requestLocationUpdates(
+            locationRequest,
+            locationCallback,
+            Looper.getMainLooper()
+        )
+    }
+
+    override fun onPause() {
+        super.onPause()
+        stopLocationUpdates()
+    }
+
+    private fun stopLocationUpdates() {
+        fusedLocationClient.removeLocationUpdates(locationCallback)
+    }
+
+   /* override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(REQUESTING_LOCATION_UPDATES_KEY, requestingLocationUpdates)
+        super.onSaveInstanceState(outState)
+    }
+
+    private fun updateValuesFromBundle(savedInstanceState: Bundle?) {
+        savedInstanceState ?: return
+
+        // Update the value of requestingLocationUpdates from the Bundle.
+        if (savedInstanceState.keySet().contains(REQUESTING_LOCATION_UPDATES_KEY)) {
+            requestingLocationUpdates = savedInstanceState.getBoolean(
+                REQUESTING_LOCATION_UPDATES_KEY
+            )
+        }
+        binding.txtLocation.text =
+            "Latitude: ${location.latitude}\nLongitude: ${location.longitude}"
+    }*/
 }
